@@ -21,13 +21,15 @@ except ImportError:
 import openpyxl
 import os
 
+print_debug = False
 FILE_NAME = 'MCX_Trading_Platform_Data.xlsx'
 
 def create_initial_file():
     """
     Function to create a new Excel file and add some initial data.
     """
-    print(f"--- Creating initial file: {FILE_NAME} ---")
+    if print_debug:
+        print(f"--- Creating initial file: {FILE_NAME} ---")
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Future Readings"
@@ -39,14 +41,16 @@ def create_initial_file():
     
     # Save the workbook
     workbook.save(FILE_NAME)
-    print(f"Created and saved {FILE_NAME}\n")
+    if print_debug:
+        print(f"Created and saved {FILE_NAME}\n")
 
 def update_existing_file(value_price):
     """
     Function to open an existing Excel file (created by another function), 
     modify a cell, and save the changes.
     """
-    print(f"--- Updating file: {FILE_NAME} ---")
+    if print_debug:
+        print(f"--- Updating file: {FILE_NAME} ---")
     if not os.path.exists(FILE_NAME):
         print(f"Error: {FILE_NAME} not found. Run create_initial_file() first.")
         return
@@ -63,7 +67,8 @@ def update_existing_file(value_price):
     
     # Save the workbook (overwrites the old one)
     workbook.save(FILE_NAME)
-    print(f"Updated and saved {FILE_NAME}\n")
+    if print_debug:
+        print(f"Updated and saved {FILE_NAME}\n")
 
 
 class ZerodhaTradingApp:
@@ -114,9 +119,9 @@ class ZerodhaTradingApp:
         # NEW: Entry/Exit popup variables
         self.entry_exit_popup = None
         self.last_entry_exit_trigger_time = None
-        self.entry_exit_cooldown = 300  # 5 minutes cooldown
-        self.entry_threshold = -2.0  # Less than -2 for entry
-        self.exit_threshold = 2.0    # More than +2 for exit
+        self.entry_exit_cooldown = 60  # 1 minutes cooldown
+        self.entry_threshold = -6.0  # Less than -6 for entry
+        self.exit_threshold = 6.0    # More than +6 for exit
         
         # NEW: Trading variables
         self.current_quantity = 1  # Default quantity
@@ -322,16 +327,16 @@ class ZerodhaTradingApp:
         entry_exit_frame = ttk.LabelFrame(left_panel, text="Entry/Exit Settings")
         entry_exit_frame.pack(fill='x', pady=5)
         
-        # Entry threshold (less than -2)
+        # Entry threshold (less than -6)
         ttk.Label(entry_exit_frame, text="Entry Threshold (₹):").grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.entry_threshold_var = tk.StringVar(value="-2.0")
+        self.entry_threshold_var = tk.StringVar(value="-6.0")
         self.entry_threshold_entry = ttk.Entry(entry_exit_frame, textvariable=self.entry_threshold_var, width=10)
         self.entry_threshold_entry.grid(row=0, column=1, padx=5, pady=5)
         ttk.Label(entry_exit_frame, text="Less than").grid(row=0, column=2, padx=5, pady=5)
         
-        # Exit threshold (more than +2)
+        # Exit threshold (more than +6)
         ttk.Label(entry_exit_frame, text="Exit Threshold (₹):").grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        self.exit_threshold_var = tk.StringVar(value="2.0")
+        self.exit_threshold_var = tk.StringVar(value="6.0")
         self.exit_threshold_entry = ttk.Entry(entry_exit_frame, textvariable=self.exit_threshold_var, width=10)
         self.exit_threshold_entry.grid(row=1, column=1, padx=5, pady=5)
         ttk.Label(entry_exit_frame, text="More than").grid(row=1, column=2, padx=5, pady=5)
@@ -474,7 +479,7 @@ class ZerodhaTradingApp:
     def setup_trading_tab(self, notebook):
         """Setup trading tab with buy/sell functionality"""
         trading_frame = ttk.Frame(notebook)
-        notebook.add(trading_frame, text="📈 Trading")
+        #notebook.add(trading_frame, text="📈 Trading")
         
         # Main container
         main_container = ttk.Frame(trading_frame)
@@ -494,8 +499,13 @@ class ZerodhaTradingApp:
         
         # Contract selection
         ttk.Label(order_frame, text="Contract:").grid(row=0, column=0, padx=5, pady=5, sticky='w')
+        # During initialization
+        # self.trading_contract = ttk.Combobox(order_frame, state='readonly')
+        # self.trading_contract.set('')  # Set initial empty value
         self.trading_contract = ttk.Combobox(order_frame, width=25)
         self.trading_contract.grid(row=0, column=1, padx=5, pady=5, sticky='ew')
+        
+        
         
         # Quantity
         ttk.Label(order_frame, text="Quantity:").grid(row=1, column=0, padx=5, pady=5, sticky='w')
@@ -517,7 +527,7 @@ class ZerodhaTradingApp:
         self.limit_price_entry.grid(row=3, column=1, padx=5, pady=5, sticky='w')
         
         # Show/hide limit price based on price type
-        self.price_type.bind('<<ComboboxSelected>>', self.toggle_limit_price)
+        self.price_type.bind('<<ComboboxSelected>>', self.toggle_limit_price())
         
         # Product type
         ttk.Label(order_frame, text="Product Type:").grid(row=4, column=0, padx=5, pady=5, sticky='w')
@@ -626,7 +636,7 @@ class ZerodhaTradingApp:
                   command=self.cancel_selected_order).pack(pady=5)
         
         # Auto-populate contracts when month comparison is loaded
-        self.month_commodity.bind('<<ComboboxSelected>>', self.update_trading_contracts)
+        self.trading_contract.bind('<<ComboboxSelected>>', lambda e: self.update_trading_contracts())
 
     def setup_calendar_spread_tab(self, notebook):
         """Setup calendar spread trading tab"""
@@ -690,11 +700,11 @@ class ZerodhaTradingApp:
         desc_frame.grid(row=6, column=0, columnspan=2, pady=10, sticky='ew')
         
         desc_text = """
-        ENTRY Spread (Price Diff < 0):
+        ENTRY Spread (Price Diff < 6):
         • BUY Next Month (Near)
         • SELL Current Month (Far)
         
-        EXIT Spread (Price Diff > 0):
+        EXIT Spread (Price Diff > 6):
         • BUY Current Month (Far)
         • SELL Next Month (Near)
         """
@@ -714,20 +724,22 @@ class ZerodhaTradingApp:
                   command=lambda: self.place_calendar_spread("EXIT"),
                   style="ExitSpread.TButton").pack(side='left', padx=5)
         
-        # Test Spread button
-        ttk.Button(action_frame, text="Test Spread", 
-                  command=self.test_spread_order).pack(side='left', padx=5)
+        
         
         # Close Spread button
         ttk.Button(action_frame, text="Close Spread", 
                   command=self.close_calendar_spread,
                   style="CloseSpread.TButton").pack(side='left', padx=5)
         
+        # Test Spread button
+        ttk.Button(action_frame, text="Test Spread", 
+                  command=self.test_spread_order, style="TestSpread.TButton").pack(side='left', padx=5)
         # Style configuration for spread buttons
         style = ttk.Style()
         style.configure("EntrySpread.TButton", foreground='dark green', background='dark green', font=('Arial', 10, 'bold'))
         style.configure("ExitSpread.TButton", foreground='dark orange', background='dark orange', font=('Arial', 10, 'bold'))
         style.configure("CloseSpread.TButton", foreground='purple', background='purple', font=('Arial', 10, 'bold'))
+        style.configure("TestSpread.TButton", foreground='black', background='black', font=('Arial', 10, 'bold'))
         
         # Spread Strategy Explanation Frame
         strategy_frame = ttk.LabelFrame(left_panel, text="Spread Strategy Logic")
@@ -735,13 +747,13 @@ class ZerodhaTradingApp:
         
         strategy_text = """
         📈 ENTRY SPREAD STRATEGY:
-        When price difference < entry threshold (-2₹):
+        When price difference < entry threshold (-6₹):
         1. BUY Next Month (cheaper/outperforming)
         2. SELL Current Month (expensive/underperforming)
         → Betting on convergence
         
         📉 EXIT SPREAD STRATEGY:
-        When price difference > exit threshold (+2₹):
+        When price difference > exit threshold (+6₹):
         1. BUY Current Month (undervalued)
         2. SELL Next Month (overvalued)
         → Betting on mean reversion
@@ -831,13 +843,50 @@ class ZerodhaTradingApp:
             self.limit_price_label.grid_remove()
             self.limit_price_entry.grid_remove()
 
-    def update_trading_contracts(self, event=None):
-        """Update trading contract dropdown when commodity changes"""
-        if hasattr(self, 'current_month_contract') and hasattr(self, 'next_month_contract'):
-            contracts = [self.current_month_contract, self.next_month_contract]
-            self.trading_contract['values'] = contracts
-            if contracts:
-                self.trading_contract.set(contracts[0])
+    def get_contracts_list(self):
+        return self.current_month_contract, self.next_month_contract
+        
+    def update_trading_contracts(self):
+        try:
+            if hasattr(self, 'current_month_contract') and hasattr(self, 'next_month_contract'):
+                #contracts = [self.current_month_contract, self.next_month_contract]
+                contracts = self.get_contracts_list()
+                
+                if not contracts:
+                    print("Warning: No contracts available")
+                    self.trading_contract.set('')
+                    self.trading_contract['values'] = []
+                    return
+                
+                # Ensure we have valid string values
+                valid_contracts = [str(c) for c in contracts if c]
+                
+                if not valid_contracts:
+                    print("Warning: No contracts available")
+                    self.trading_contract.set('')
+                    self.trading_contract['values'] = []
+                    return
+                    
+                # Update combobox values
+                self.trading_contract['values'] = valid_contracts
+                
+                # Set the first contract
+                self.trading_contract.set(valid_contracts[0])
+                
+        except Exception as e:
+            print(f"Error updating contracts: {e}")
+            self.trading_contract.set('')
+        
+    # def update_trading_contracts(self, event=None):
+    #     """Update trading contract dropdown when commodity changes"""
+    #     if hasattr(self, 'current_month_contract') and hasattr(self, 'next_month_contract'):
+    #         contracts = [self.current_month_contract, self.next_month_contract]
+    #         self.trading_contract['values'] = contracts
+    #         if contracts:
+    #             self.trading_contract.set(contracts[0])
+    #         else:
+    #             self.trading_contract.set('')  # Set to empty string
+
 
     def place_buy_order(self):
         """Place a single BUY order"""
@@ -1439,7 +1488,7 @@ class ZerodhaTradingApp:
             return
         
         # Test entry popup
-        self.show_entry_exit_popup(-2.5, "ENTRY")
+        self.show_entry_exit_popup(-6.0, "ENTRY")
         
         # Test exit popup after 2 seconds
         self.root.after(2000, lambda: self.show_entry_exit_popup(2.5, "EXIT"))
@@ -1471,9 +1520,9 @@ class ZerodhaTradingApp:
             
         except ValueError:
             # If invalid thresholds, use defaults
-            if price_difference < -2.0:
+            if price_difference < -6.0:
                 return True, "ENTRY", price_difference
-            elif price_difference > 2.0:
+            elif price_difference > 6.0:
                 return True, "EXIT", price_difference
             return False, None, price_difference
         
@@ -1857,16 +1906,16 @@ class ZerodhaTradingApp:
         interpretation_frame.pack(fill='x', pady=10)
         
         if signal_type == "ENTRY":
-            if price_difference < -3.0:
+            if price_difference < -7.0:
                 interpretation = "💪 VERY STRONG ENTRY: Next month significantly outperforming!"
-            elif price_difference < -2.0:
+            elif price_difference < -6.0:
                 interpretation = "📈 STRONG ENTRY: Next month outperforming current month"
             else:
                 interpretation = "📊 ENTRY SIGNAL: Consider position entry"
         else:  # EXIT
-            if price_difference > 3.0:
+            if price_difference > 7.0:
                 interpretation = "💪 VERY STRONG EXIT: Current month significantly outperforming!"
-            elif price_difference > 2.0:
+            elif price_difference > 6.0:
                 interpretation = "📉 STRONG EXIT: Current month outperforming next month"
             else:
                 interpretation = "📊 EXIT SIGNAL: Consider position exit"
@@ -2096,7 +2145,7 @@ class ZerodhaTradingApp:
             self.entry_exit_status_label.config(text="Status: Ready", foreground='green')
             self.log_message("🔔 Entry/Exit signals unmuted")
         except ValueError:
-            self.entry_exit_cooldown = 300
+            self.entry_exit_cooldown = 60
             self.entry_exit_status_label.config(text="Status: Ready", foreground='green')
 
     def update_signal_display(self, signal_type, price_difference):
@@ -3087,8 +3136,8 @@ class ZerodhaTradingApp:
             # Calculate price difference using the formula:
             # change difference in rs = current month (Current Price - Previous Close) - next month (Current Price - Previous Close)
             price_difference = current_change_rupees - next_change_rupees
-            
-            print("price_difference: ", price_difference)
+            if print_debug:
+                print("price_difference: ", price_difference)
             
             update_existing_file(price_difference)
             
@@ -3301,13 +3350,13 @@ class ZerodhaTradingApp:
             )
             
             # Update total sum with color coding
-            if total_sum > 2.0:
+            if total_sum > 6.0:
                 total_color = 'dark green'
                 total_emoji = "🚀"
             elif total_sum > 0.5:
                 total_color = 'green'
                 total_emoji = "📈"
-            elif total_sum < -2.0:
+            elif total_sum < -6.0:
                 total_color = 'dark red'
                 total_emoji = "⚠️"
             elif total_sum < -0.5:
@@ -3412,11 +3461,11 @@ class ZerodhaTradingApp:
                 
                 # Apply colors based on total sum
                 if total_sum is not None:
-                    if total_sum > 2.0:
+                    if total_sum > 6.0:
                         self.history_text.tag_add("dark_green", f"end-2l", f"end-1l")
                     elif total_sum > 0.5:
                         self.history_text.tag_add("green", f"end-2l", f"end-1l")
-                    elif total_sum < -2.0:
+                    elif total_sum < -6.0:
                         self.history_text.tag_add("dark_red", f"end-2l", f"end-1l")
                     elif total_sum < -0.5:
                         self.history_text.tag_add("red", f"end-2l", f"end-1l")
@@ -3616,13 +3665,13 @@ class ZerodhaTradingApp:
         message_frame.pack(fill='x', pady=10)
         
         # Determine message based on total sum
-        if total_sum > 2.0:
+        if total_sum > 6.0:
             message_text = "🔥 STRONG POSITIVE MOMENTUM: Both months up significantly!"
             total_color = 'dark green'
         elif total_sum > 0.5:
             message_text = "📈 Positive momentum: Total changes are positive"
             total_color = 'green'
-        elif total_sum < -2.0:
+        elif total_sum < -6.0:
             message_text = "⚠️ STRONG NEGATIVE MOMENTUM: Both months down significantly!"
             total_color = 'dark red'
         elif total_sum < -0.5:
@@ -3676,8 +3725,8 @@ class ZerodhaTradingApp:
                   command=lambda: self.acknowledge_trigger(window)).pack(side='right', padx=5)
         
         # Mute button
-        ttk.Button(button_frame, text="Mute Alerts for 5 min",
-                  command=lambda: self.mute_alerts(300, window)).pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Mute Alerts for 1 min",
+                  command=lambda: self.mute_alerts(60, window)).pack(side='right', padx=5)
         
         # Log this trigger
         self.log_message(f"🚨 TRIGGER: Next month outperforming by {difference:.2f}% (Total: {total_sum:+.2f}%)")
@@ -4123,13 +4172,13 @@ class ZerodhaTradingApp:
             
             # Update total sum of changes
             # Determine color for total sum
-            if total_sum > 2.0:
+            if total_sum > 6.0:
                 total_color = 'dark green'
                 total_emoji = "🚀"
             elif total_sum > 0.5:
                 total_color = 'green'
                 total_emoji = "📈"
-            elif total_sum < -2.0:
+            elif total_sum < -6.0:
                 total_color = 'dark red'
                 total_emoji = "⚠️"
             elif total_sum < -0.5:
@@ -4186,11 +4235,11 @@ class ZerodhaTradingApp:
             
             # Update window background based on total sum
             if self.comparison_popup and self.comparison_popup.winfo_exists():
-                if total_sum > 2.0:
+                if total_sum > 6.0:
                     self.comparison_popup.configure(bg='#E8F5E9')  # Very light green
                 elif total_sum > 0.5:
                     self.comparison_popup.configure(bg='#F1F8E9')  # Light green
-                elif total_sum < -2.0:
+                elif total_sum < -6.0:
                     self.comparison_popup.configure(bg='#FFEBEE')  # Very light red
                 elif total_sum < -0.5:
                     self.comparison_popup.configure(bg='#FFE5E5')  # Light red
@@ -4198,7 +4247,7 @@ class ZerodhaTradingApp:
                     self.comparison_popup.configure(bg='light yellow')
                 
             # Visual effect for significant differences
-            if abs(total_sum) > 3.0:
+            if abs(total_sum) > 7.0:
                 current_bg = self.popup_smiley.cget('bg')
                 self.popup_smiley.config(
                     bg='gold' if current_bg == 'SystemButtonFace' else 'SystemButtonFace'
