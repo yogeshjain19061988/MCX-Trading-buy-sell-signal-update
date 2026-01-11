@@ -114,7 +114,7 @@ class ZerodhaTradingApp:
         self.triggered_popup = None
         self.last_trigger_time = None
         self.trigger_cooldown = 60  # seconds between triggers
-        self.trigger_threshold = 0.5  # percentage threshold difference
+        self.trigger_threshold = 0.2  # percentage threshold difference
         
         # NEW: Price difference popup
         self.price_diff_popup = None
@@ -123,8 +123,8 @@ class ZerodhaTradingApp:
         self.entry_exit_popup = None
         self.last_entry_exit_trigger_time = None
         self.entry_exit_cooldown = 60  # 1 minutes cooldown
-        self.entry_threshold = -6.0  # Less than -6 for entry
-        self.exit_threshold = 6.0    # More than +6 for exit
+        self.entry_threshold = -10.0  # Less than -10 for entry
+        self.exit_threshold = 10.0    # More than +6 for exit
         
         # NEW: Trading variables
         self.current_quantity = 1  # Default quantity
@@ -136,6 +136,15 @@ class ZerodhaTradingApp:
         self.spread_position = None
         self.spread_quantity = 1
         self.auto_spread_trading = False
+        
+        # NEW: Auto-exit variables
+        self.auto_exit_enabled = False
+        self.auto_exit_profit_target = 0.0  # Default profit target in rupees
+        self.auto_exit_stop_loss = 0.0  # Default stop loss in rupees
+        self.trade_start_price = 0.0
+        self.trade_direction = None  # "BUY" or "SELL"
+        self.current_position = None
+        self.auto_exit_running = False
         
         # Load credentials
         self.load_credentials()
@@ -200,6 +209,9 @@ class ZerodhaTradingApp:
         
         # NEW: Calendar Spread Trading Tab
         self.setup_calendar_spread_tab(notebook)
+        
+        # NEW: Auto Exit Tab
+        self.setup_auto_exit_tab(notebook)
 
     def clear_log(self):
         """Clear the log messages"""
@@ -347,7 +359,7 @@ class ZerodhaTradingApp:
         
         # Trigger threshold
         ttk.Label(trigger_frame, text="Trigger Threshold (%):").grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.trigger_threshold_var = tk.StringVar(value="0.5")
+        self.trigger_threshold_var = tk.StringVar(value="0.2")
         self.trigger_threshold_entry = ttk.Entry(trigger_frame, textvariable=self.trigger_threshold_var, width=10)
         self.trigger_threshold_entry.grid(row=0, column=1, padx=5, pady=5, sticky='w')
         ttk.Label(trigger_frame, text="% difference").grid(row=0, column=2, padx=5, pady=5)
@@ -382,16 +394,16 @@ class ZerodhaTradingApp:
         
         entry_exit_frame.grid_columnconfigure(1, weight=1)
         
-        # Entry threshold (less than -6)
+        # Entry threshold (less than -10)
         ttk.Label(entry_exit_frame, text="Entry Threshold (₹):").grid(row=0, column=0, padx=5, pady=5, sticky='w')
-        self.entry_threshold_var = tk.StringVar(value="-6.0")
+        self.entry_threshold_var = tk.StringVar(value="-10.0")
         self.entry_threshold_entry = ttk.Entry(entry_exit_frame, textvariable=self.entry_threshold_var, width=10)
         self.entry_threshold_entry.grid(row=0, column=1, padx=5, pady=5, sticky='w')
         ttk.Label(entry_exit_frame, text="Less than").grid(row=0, column=2, padx=5, pady=5)
         
         # Exit threshold (more than +6)
         ttk.Label(entry_exit_frame, text="Exit Threshold (₹):").grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        self.exit_threshold_var = tk.StringVar(value="6.0")
+        self.exit_threshold_var = tk.StringVar(value="10.0")
         self.exit_threshold_entry = ttk.Entry(entry_exit_frame, textvariable=self.exit_threshold_var, width=10)
         self.exit_threshold_entry.grid(row=1, column=1, padx=5, pady=5, sticky='w')
         ttk.Label(entry_exit_frame, text="More than").grid(row=1, column=2, padx=5, pady=5)
@@ -1026,6 +1038,98 @@ class ZerodhaTradingApp:
         self.net_spread_pnl_label = ttk.Label(performance_frame, text="₹0.00", font=('Arial', 12, 'bold'))
         self.net_spread_pnl_label.grid(row=3, column=1, sticky='w', pady=5)
 
+    def setup_auto_exit_tab(self, notebook):
+        """Setup auto-exit tab for profit monitoring"""
+        auto_exit_frame = ttk.Frame(notebook)
+        notebook.add(auto_exit_frame, text="🤖 Auto Exit")
+        
+        # Configure grid for resizable layout
+        auto_exit_frame.grid_columnconfigure(0, weight=1)
+        auto_exit_frame.grid_rowconfigure(0, weight=1)
+        
+        # Main container
+        container = ttk.Frame(auto_exit_frame)
+        container.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Auto-exit settings frame
+        settings_frame = ttk.LabelFrame(container, text="Auto Exit Settings")
+        settings_frame.pack(fill='both', expand=True, pady=(0, 10))
+        
+        settings_frame.grid_columnconfigure(1, weight=1)
+        
+        # Profit target
+        ttk.Label(settings_frame, text="Profit Target (₹):").grid(row=0, column=0, padx=10, pady=10, sticky='w')
+        self.profit_target_var = tk.StringVar(value="100.0")
+        self.profit_target_entry = ttk.Entry(settings_frame, textvariable=self.profit_target_var, width=15)
+        self.profit_target_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+        
+        # Stop loss
+        ttk.Label(settings_frame, text="Stop Loss (₹):").grid(row=1, column=0, padx=10, pady=10, sticky='w')
+        self.stop_loss_var = tk.StringVar(value="50.0")
+        self.stop_loss_entry = ttk.Entry(settings_frame, textvariable=self.stop_loss_var, width=15)
+        self.stop_loss_entry.grid(row=1, column=1, padx=10, pady=10, sticky='w')
+        
+        # Checkbox for auto-exit
+        self.auto_exit_var = tk.BooleanVar(value=False)
+        auto_exit_check = ttk.Checkbutton(settings_frame, text="Enable Auto Exit", 
+                                         variable=self.auto_exit_var,
+                                         command=self.toggle_auto_exit)
+        auto_exit_check.grid(row=2, column=0, columnspan=2, pady=10, sticky='w')
+        
+        # Control buttons
+        button_frame = ttk.Frame(settings_frame)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=15)
+        
+        ttk.Button(button_frame, text="Start Monitoring", 
+                  command=self.start_auto_exit_monitoring).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Stop Monitoring", 
+                  command=self.stop_auto_exit_monitoring).pack(side='left', padx=5)
+        
+        # Status frame
+        status_frame = ttk.LabelFrame(container, text="Auto Exit Status")
+        status_frame.pack(fill='both', expand=True, pady=10)
+        
+        # Current position info
+        ttk.Label(status_frame, text="Current Position:").grid(row=0, column=0, padx=10, pady=10, sticky='w')
+        self.position_status_label = ttk.Label(status_frame, text="No active position", foreground='red')
+        self.position_status_label.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+        
+        # Entry price
+        ttk.Label(status_frame, text="Entry Price:").grid(row=1, column=0, padx=10, pady=5, sticky='w')
+        self.entry_price_label = ttk.Label(status_frame, text="₹0.00")
+        self.entry_price_label.grid(row=1, column=1, padx=10, pady=5, sticky='w')
+        
+        # Current P&L
+        ttk.Label(status_frame, text="Current P&L:").grid(row=2, column=0, padx=10, pady=5, sticky='w')
+        self.current_pnl_label = ttk.Label(status_frame, text="₹0.00", font=('Arial', 12, 'bold'))
+        self.current_pnl_label.grid(row=2, column=1, padx=10, pady=5, sticky='w')
+        
+        # Profit target status
+        ttk.Label(status_frame, text="Profit Target:").grid(row=3, column=0, padx=10, pady=5, sticky='w')
+        self.profit_target_status = ttk.Label(status_frame, text="₹100.00")
+        self.profit_target_status.grid(row=3, column=1, padx=10, pady=5, sticky='w')
+        
+        # Stop loss status
+        ttk.Label(status_frame, text="Stop Loss:").grid(row=4, column=0, padx=10, pady=5, sticky='w')
+        self.stop_loss_status = ttk.Label(status_frame, text="₹50.00")
+        self.stop_loss_status.grid(row=4, column=1, padx=10, pady=5, sticky='w')
+        
+        # Action button
+        self.exit_button = ttk.Button(status_frame, text="MANUAL EXIT", 
+                                     command=self.manual_exit_position,
+                                     state='disabled')
+        self.exit_button.grid(row=5, column=0, columnspan=2, pady=15)
+        
+        # Log frame
+        log_frame = ttk.LabelFrame(container, text="Auto Exit Log")
+        log_frame.pack(fill='both', expand=True, pady=10)
+        
+        log_frame.grid_columnconfigure(0, weight=1)
+        log_frame.grid_rowconfigure(0, weight=1)
+        
+        self.auto_exit_log = scrolledtext.ScrolledText(log_frame, height=10)
+        self.auto_exit_log.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
+
     def toggle_limit_price(self, event=None):
         """Show/hide limit price field based on price type"""
         if self.price_type.get() == "LIMIT":
@@ -1140,6 +1244,11 @@ class ZerodhaTradingApp:
             
             if current_result and next_result:
                 messagebox.showinfo("Success", "BUY TOGETHER orders placed successfully!")
+                
+                # NEW: Check for auto-exit monitoring
+                self.root.after(2000, self.check_current_position)
+                if self.auto_exit_running and self.current_position:
+                    self.log_auto_exit(f"New BUY TOGETHER position detected")
             else:
                 messagebox.showwarning("Partial Success", 
                                      "Some orders may not have been placed. Check order history.")
@@ -1190,6 +1299,13 @@ class ZerodhaTradingApp:
             if result:
                 message = f"{transaction_type} order placed successfully!"
                 messagebox.showinfo("Success", message)
+                
+                # NEW: Check for auto-exit monitoring if position is opened
+                if transaction_type in ["BUY", "SELL"]:
+                    # Wait a moment for position to update
+                    self.root.after(2000, self.check_current_position)
+                    if self.auto_exit_running and self.current_position:
+                        self.log_auto_exit(f"New position detected: {contract} {transaction_type} {quantity}")
             else:
                 messagebox.showerror("Error", "Failed to place order")
                 
@@ -1702,7 +1818,7 @@ class ZerodhaTradingApp:
             return
         
         # Test entry popup
-        self.show_entry_exit_popup(-6.0, "ENTRY")
+        self.show_entry_exit_popup(-10.0, "ENTRY")
         
         # Test exit popup after 2 seconds
         self.root.after(2000, lambda: self.show_entry_exit_popup(2.5, "EXIT"))
@@ -1734,9 +1850,9 @@ class ZerodhaTradingApp:
             
         except ValueError:
             # If invalid thresholds, use defaults
-            if price_difference < -6.0:
+            if price_difference < -10.0:
                 return True, "ENTRY", price_difference
-            elif price_difference > 6.0:
+            elif price_difference > 10.0:
                 return True, "EXIT", price_difference
             return False, None, price_difference
         
@@ -1970,6 +2086,332 @@ class ZerodhaTradingApp:
         self.update_spread_performance_metrics()
         
         messagebox.showinfo("Test Successful", "Test spread order recorded successfully!")
+
+    # ==============================================
+    # AUTO-EXIT FUNCTIONS
+    # ==============================================
+
+    def toggle_auto_exit(self):
+        """Toggle auto-exit functionality"""
+        self.auto_exit_enabled = self.auto_exit_var.get()
+        status = "enabled" if self.auto_exit_enabled else "disabled"
+        self.log_auto_exit(f"Auto exit {status}")
+
+    def start_auto_exit_monitoring(self):
+        """Start monitoring for auto-exit conditions"""
+        if not self.is_logged_in:
+            messagebox.showerror("Error", "Please login first")
+            return
+        
+        try:
+            # Get profit target and stop loss
+            self.auto_exit_profit_target = float(self.profit_target_var.get())
+            self.auto_exit_stop_loss = float(self.stop_loss_var.get())
+            
+            # Update status labels
+            self.profit_target_status.config(text=f"₹{self.auto_exit_profit_target:.2f}")
+            self.stop_loss_status.config(text=f"₹{self.auto_exit_stop_loss:.2f}")
+            
+            # Check if we have a position
+            self.check_current_position()
+            
+            if not self.current_position:
+                self.log_auto_exit("No active position found. Waiting for new position...")
+            
+            self.auto_exit_running = True
+            
+            # Start monitoring thread
+            threading.Thread(target=self.monitor_for_auto_exit, daemon=True).start()
+            
+            self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}, Stop loss: ₹{self.auto_exit_stop_loss}")
+            
+        except ValueError:
+            messagebox.showerror("Error", "Please enter valid numbers for profit target and stop loss")
+
+    def stop_auto_exit_monitoring(self):
+        """Stop auto-exit monitoring"""
+        self.auto_exit_running = False
+        self.log_auto_exit("Auto exit monitoring stopped")
+
+    def check_current_position(self):
+        """Check current positions and set up auto-exit"""
+        try:
+            # Get positions from Zerodha
+            positions_data = self.kite.positions()
+            day_positions = positions_data.get('day', [])
+            net_positions = positions_data.get('net', [])
+            
+            all_positions = day_positions + net_positions
+            
+            # Find active MCX futures positions
+            active_positions = []
+            for position in all_positions:
+                if (position['exchange'] == 'MCX' and 
+                    position['instrument_type'] == 'FUT' and 
+                    position['quantity'] != 0):
+                    active_positions.append(position)
+            
+            if len(active_positions) > 0:
+                # For simplicity, track the first position
+                position = active_positions[0]
+                self.current_position = {
+                    'tradingsymbol': position['tradingsymbol'],
+                    'quantity': position['quantity'],
+                    'avg_price': position['average_price'],
+                    'direction': 'BUY' if position['quantity'] > 0 else 'SELL'
+                }
+                
+                # Set trade start price
+                self.trade_start_price = position['average_price']
+                self.trade_direction = self.current_position['direction']
+                
+                # Update UI
+                self.update_position_display()
+                
+                self.log_auto_exit(f"Active position found: {self.current_position['tradingsymbol']} "
+                                  f"{self.current_position['direction']} {abs(self.current_position['quantity'])} "
+                                  f"@ ₹{self.trade_start_price:.2f}")
+                
+                return True
+            else:
+                self.current_position = None
+                self.update_position_display()
+                return False
+                
+        except Exception as e:
+            self.log_auto_exit(f"Error checking positions: {e}")
+            return False
+
+    def update_position_display(self):
+        """Update the position display in auto-exit tab"""
+        if self.current_position:
+            position_text = f"{self.current_position['tradingsymbol']} "
+            position_text += f"{self.current_position['direction']} {abs(self.current_position['quantity'])}"
+            
+            self.position_status_label.config(text=position_text, foreground='green')
+            self.entry_price_label.config(text=f"₹{self.trade_start_price:.2f}")
+            self.exit_button.config(state='normal')
+        else:
+            self.position_status_label.config(text="No active position", foreground='red')
+            self.entry_price_label.config(text="₹0.00")
+            self.current_pnl_label.config(text="₹0.00")
+            self.exit_button.config(state='disabled')
+
+    def monitor_for_auto_exit(self):
+        """Monitor positions for auto-exit conditions"""
+        update_interval = 3  # seconds
+        
+        while self.auto_exit_running and self.is_logged_in:
+            try:
+                # Check current position
+                if not self.current_position:
+                    # Try to find a new position
+                    self.check_current_position()
+                    time.sleep(5)
+                    continue
+                
+                # Get current price
+                tradingsymbol = self.current_position['tradingsymbol']
+                ltp_data = self.kite.ltp(f"MCX:{tradingsymbol}")
+                current_price = ltp_data[f"MCX:{tradingsymbol}"]['last_price']
+                
+                # Calculate P&L
+                if self.trade_direction == "BUY":
+                    pnl = (current_price - self.trade_start_price) * abs(self.current_position['quantity'])
+                else:  # SELL
+                    pnl = (self.trade_start_price - current_price) * abs(self.current_position['quantity'])
+                
+                # Update P&L display
+                self.root.after(0, lambda p=pnl: self.update_pnl_display(p))
+                
+                # Check exit conditions if auto-exit is enabled
+                if self.auto_exit_enabled:
+                    if pnl >= self.auto_exit_profit_target:
+                        self.log_auto_exit(f"🎯 PROFIT TARGET REACHED: ₹{pnl:.2f}")
+                        self.root.after(0, lambda: self.auto_exit_position("PROFIT"))
+                        
+                    elif pnl <= -self.auto_exit_stop_loss:
+                        self.log_auto_exit(f"⚠️ STOP LOSS HIT: ₹{pnl:.2f}")
+                        self.root.after(0, lambda: self.auto_exit_position("STOP_LOSS"))
+                
+                time.sleep(update_interval)
+                
+            except Exception as e:
+                self.log_auto_exit(f"Error in auto-exit monitoring: {e}")
+                time.sleep(5)
+
+    def update_pnl_display(self, pnl):
+        """Update P&L display with color coding"""
+        pnl_text = f"₹{pnl:+.2f}"
+        
+        if pnl > 0:
+            self.current_pnl_label.config(text=pnl_text, foreground='green')
+        elif pnl < 0:
+            self.current_pnl_label.config(text=pnl_text, foreground='red')
+        else:
+            self.current_pnl_label.config(text=pnl_text, foreground='orange')
+
+    def auto_exit_position(self, reason):
+        """Automatically exit the current position"""
+        if not self.current_position:
+            self.log_auto_exit("No position to exit")
+            return
+        
+        try:
+            tradingsymbol = self.current_position['tradingsymbol']
+            quantity = abs(self.current_position['quantity'])
+            
+            # Determine exit direction (opposite of entry)
+            if self.trade_direction == "BUY":
+                exit_transaction = "SELL"
+            else:  # SELL
+                exit_transaction = "BUY"
+            
+            # Execute exit order
+            result = self.execute_order(
+                tradingsymbol=tradingsymbol,
+                transaction_type=exit_transaction,
+                quantity=quantity,
+                order_type="MARKET",
+                product="MIS"
+            )
+            
+            if result:
+                # Get current price for P&L calculation
+                ltp_data = self.kite.ltp(f"MCX:{tradingsymbol}")
+                exit_price = ltp_data[f"MCX:{tradingsymbol}"]['last_price']
+                
+                # Calculate final P&L
+                if self.trade_direction == "BUY":
+                    final_pnl = (exit_price - self.trade_start_price) * quantity
+                else:
+                    final_pnl = (self.trade_start_price - exit_price) * quantity
+                
+                # Log the exit
+                reason_text = {
+                    "PROFIT": "Profit target achieved",
+                    "STOP_LOSS": "Stop loss triggered"
+                }.get(reason, "Auto exit")
+                
+                self.log_auto_exit(f"✅ AUTO EXIT: {reason_text}")
+                self.log_auto_exit(f"   Exit price: ₹{exit_price:.2f}")
+                self.log_auto_exit(f"   Final P&L: ₹{final_pnl:+.2f}")
+                
+                # Show notification
+                self.show_auto_exit_notification(reason, final_pnl)
+                
+                # Reset position
+                self.current_position = None
+                self.update_position_display()
+                
+                # Play sound notification
+                self.play_exit_sound(reason)
+                
+            else:
+                self.log_auto_exit(f"❌ Failed to auto-exit position")
+                
+        except Exception as e:
+            self.log_auto_exit(f"❌ Error in auto-exit: {e}")
+
+    def manual_exit_position(self):
+        """Manually exit the current position"""
+        if not self.current_position:
+            messagebox.showinfo("No Position", "No active position to exit")
+            return
+        
+        if messagebox.askyesno("Confirm Exit", "Are you sure you want to exit this position?"):
+            self.auto_exit_position("MANUAL")
+
+    def show_auto_exit_notification(self, reason, pnl):
+        """Show notification when auto-exit occurs"""
+        # Create notification window
+        window = tk.Toplevel(self.root)
+        window.title("💰 AUTO EXIT TRIGGERED")
+        window.geometry("400x300")
+        
+        # Make window stay on top
+        window.attributes('-topmost', True)
+        
+        # Set background color based on reason
+        if reason == "PROFIT":
+            bg_color = '#E8F5E9'  # Light green
+            title = "🎯 PROFIT TARGET REACHED!"
+            emoji = "💰"
+        elif reason == "STOP_LOSS":
+            bg_color = '#FFEBEE'  # Light red
+            title = "⚠️ STOP LOSS TRIGGERED!"
+            emoji = "🛑"
+        else:
+            bg_color = '#FFF3E0'  # Light orange
+            title = "📤 POSITION EXITED"
+            emoji = "📤"
+        
+        window.configure(bg=bg_color)
+        
+        # Center window
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        x = (window.winfo_screenwidth() // 2) - (width // 2)
+        y = (window.winfo_screenheight() // 2) - (height // 2)
+        window.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Title
+        ttk.Label(window, text=emoji, font=('Arial', 48), background=bg_color).pack(pady=10)
+        ttk.Label(window, text=title, font=('Arial', 14, 'bold'), background=bg_color).pack(pady=5)
+        
+        # P&L display
+        pnl_color = 'green' if pnl > 0 else 'red' if pnl < 0 else 'orange'
+        pnl_text = f"Final P&L: ₹{pnl:+.2f}"
+        ttk.Label(window, text=pnl_text, font=('Arial', 16, 'bold'), 
+                 foreground=pnl_color, background=bg_color).pack(pady=10)
+        
+        # Position info
+        if self.current_position:
+            info_text = f"{self.current_position['tradingsymbol']}\n"
+            info_text += f"Entry: ₹{self.trade_start_price:.2f}\n"
+            info_text += f"Quantity: {abs(self.current_position['quantity'])}"
+            ttk.Label(window, text=info_text, font=('Arial', 10), 
+                     background=bg_color).pack(pady=10)
+        
+        # Close button
+        ttk.Button(window, text="OK", command=window.destroy).pack(pady=20)
+        
+        # Auto-close after 10 seconds
+        window.after(10000, window.destroy)
+
+    def play_exit_sound(self, reason):
+        """Play sound notification for exit"""
+        try:
+            # Play system beep with different patterns
+            if reason == "PROFIT":
+                # Success beep pattern
+                for i in range(3):
+                    self.root.bell()
+                    time.sleep(0.1)
+            elif reason == "STOP_LOSS":
+                # Warning beep pattern
+                for i in range(2):
+                    self.root.bell()
+                    time.sleep(0.3)
+                    self.root.bell()
+                    time.sleep(0.1)
+            else:
+                # Regular beep
+                self.root.bell()
+        except:
+            pass
+
+    def log_auto_exit(self, message):
+        """Add message to auto-exit log"""
+        def update_log():
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            self.auto_exit_log.insert(tk.END, f"[{timestamp}] {message}\n")
+            self.auto_exit_log.see(tk.END)
+            # Also log to main log
+            self.log_message(f"AUTO EXIT: {message}")
+        
+        self.root.after(0, update_log)
 
     # ==============================================
     # AUTO-TRADING SPREADS BASED ON SIGNALS
@@ -3222,13 +3664,13 @@ class ZerodhaTradingApp:
                     comparison_text = "📈 Next month UP, Current DOWN vs Prev Close"
                     result_color = 'green'
                     smiley_status = "POSITIVE"
-                elif relative_performance > 0.5:  # Next month performing better by 0.5%
+                elif relative_performance > 0.2:  # Next month performing better by 0.2%
                     smiley = "😊"
                     smiley_color = 'green'
                     comparison_text = f"📈 Next month +{relative_performance:.2f}% better"
                     result_color = 'green'
                     smiley_status = "POSITIVE"
-                elif relative_performance < -0.5:  # Current month performing better
+                elif relative_performance < -0.2:  # Current month performing better
                     smiley = "☹️"
                     smiley_color = 'red'
                     comparison_text = f"📉 Current month +{abs(relative_performance):.2f}% better"
@@ -3307,16 +3749,16 @@ class ZerodhaTradingApp:
             )
             
             # Update total sum with color coding
-            if total_sum > 6.0:
+            if total_sum > 10.0:
                 total_color = 'dark green'
                 total_emoji = "🚀"
-            elif total_sum > 0.5:
+            elif total_sum > 0.2:
                 total_color = 'green'
                 total_emoji = "📈"
-            elif total_sum < -6.0:
+            elif total_sum < -10.0:
                 total_color = 'dark red'
                 total_emoji = "⚠️"
-            elif total_sum < -0.5:
+            elif total_sum < -0.2:
                 total_color = 'red'
                 total_emoji = "📉"
             else:
@@ -3418,13 +3860,13 @@ class ZerodhaTradingApp:
                 
                 # Apply colors based on total sum
                 if total_sum is not None:
-                    if total_sum > 6.0:
+                    if total_sum > 10.0:
                         self.history_text.tag_add("dark_green", f"end-2l", f"end-1l")
-                    elif total_sum > 0.5:
+                    elif total_sum > 0.2:
                         self.history_text.tag_add("green", f"end-2l", f"end-1l")
-                    elif total_sum < -6.0:
+                    elif total_sum < -10.0:
                         self.history_text.tag_add("dark_red", f"end-2l", f"end-1l")
-                    elif total_sum < -0.5:
+                    elif total_sum < -0.2:
                         self.history_text.tag_add("red", f"end-2l", f"end-1l")
                     else:
                         self.history_text.tag_add("orange", f"end-2l", f"end-1l")
@@ -3489,7 +3931,7 @@ class ZerodhaTradingApp:
             
         except ValueError:
             # If invalid threshold, use defaults
-            if next_change - current_change > 0.5:
+            if next_change - current_change > 0.2:
                 current_time = time.time()
                 if self.last_trigger_time is None or (current_time - self.last_trigger_time) > 60:
                     return True, next_change - current_change
@@ -3502,7 +3944,7 @@ class ZerodhaTradingApp:
             return
         
         # Simulate trigger condition
-        current_change = -0.5  # Current month down 0.5%
+        current_change = -0.2  # Current month down 0.2%
         next_change = 1.5      # Next month up 1.5%
         difference = 2.0       # 2% difference
         
@@ -3519,7 +3961,7 @@ class ZerodhaTradingApp:
         
         # Create new popup window with resizable panes
         window = tk.Toplevel(self.root)
-        window.title("🚨 ALERT: Next Month Outperforming!")
+        #window.title("🚨 ALERT: Next Month Outperforming!")
         window.geometry("700x600")
         
         # Make window resizable and draggable
@@ -4068,16 +4510,16 @@ class ZerodhaTradingApp:
             
             # Update total sum of changes
             # Determine color for total sum
-            if total_sum > 6.0:
+            if total_sum > 10.0:
                 total_color = 'dark green'
                 total_emoji = "🚀"
-            elif total_sum > 0.5:
+            elif total_sum > 0.2:
                 total_color = 'green'
                 total_emoji = "📈"
-            elif total_sum < -6.0:
+            elif total_sum < -10.0:
                 total_color = 'dark red'
                 total_emoji = "⚠️"
-            elif total_sum < -0.5:
+            elif total_sum < -0.2:
                 total_color = 'red'
                 total_emoji = "📉"
             else:
@@ -4131,13 +4573,13 @@ class ZerodhaTradingApp:
             
             # Update window background based on total sum
             if self.comparison_popup and self.comparison_popup.winfo_exists():
-                if total_sum > 6.0:
+                if total_sum > 10.0:
                     self.comparison_popup.configure(bg='#E8F5E9')  # Very light green
-                elif total_sum > 0.5:
+                elif total_sum > 0.2:
                     self.comparison_popup.configure(bg='#F1F8E9')  # Light green
-                elif total_sum < -6.0:
+                elif total_sum < -10.0:
                     self.comparison_popup.configure(bg='#FFEBEE')  # Very light red
-                elif total_sum < -0.5:
+                elif total_sum < -0.2:
                     self.comparison_popup.configure(bg='#FFE5E5')  # Light red
                 else:
                     self.comparison_popup.configure(bg='light yellow')
