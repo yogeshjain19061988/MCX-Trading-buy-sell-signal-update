@@ -42,19 +42,3 @@ coll = COLLECT(
     upx_exclude=[],
     name='MCX_Trade_Signal_Updater',
 )
-
-from PyInstaller.utils.hooks import collect_all
-import pkg_resources
-
-hiddenimports = []
-datas = []
-binaries = []
-
-for pkg in pkg_resources.working_set:
-    try:
-        collected = collect_all(pkg.key)
-        datas += collected[0]
-        binaries += collected[1]
-        hiddenimports += collected[2]
-    except:
-        pass
