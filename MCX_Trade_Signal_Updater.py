@@ -113,7 +113,7 @@ class ZerodhaTradingApp:
         # NEW: Triggered popup variables
         self.triggered_popup = None
         self.last_trigger_time = None
-        self.trigger_cooldown = 60  # seconds between triggers
+        self.trigger_cooldown = 600  # seconds between triggers
         self.trigger_threshold = 0.2  # percentage threshold difference
         
         # NEW: Price difference popup
@@ -122,7 +122,7 @@ class ZerodhaTradingApp:
         # NEW: Entry/Exit popup variables
         self.entry_exit_popup = None
         self.last_entry_exit_trigger_time = None
-        self.entry_exit_cooldown = 60  # 1 minutes cooldown
+        self.entry_exit_cooldown = 600  # 1 minutes cooldown
         self.entry_threshold = -10.0  # Less than -10 for entry
         self.exit_threshold = 10.0    # More than +6 for exit
         
@@ -366,7 +366,7 @@ class ZerodhaTradingApp:
         
         # Cooldown period
         ttk.Label(trigger_frame, text="Cooldown (sec):").grid(row=1, column=0, padx=5, pady=5, sticky='w')
-        self.cooldown_var = tk.StringVar(value="60")
+        self.cooldown_var = tk.StringVar(value="600")
         self.cooldown_entry = ttk.Entry(trigger_frame, textvariable=self.cooldown_var, width=10)
         self.cooldown_entry.grid(row=1, column=1, padx=5, pady=5, sticky='w')
         
@@ -672,7 +672,7 @@ class ZerodhaTradingApp:
         ttk.Label(order_frame, text="Product Type:").grid(row=4, column=0, padx=5, pady=5, sticky='w')
         self.product_type = ttk.Combobox(order_frame, values=["MIS", "CNC", "NRML"], width=10)
         self.product_type.grid(row=4, column=1, padx=5, pady=5, sticky='w')
-        self.product_type.set("MIS")
+        self.product_type.set("NRML")
         
         # Action buttons frame
         button_frame = ttk.Frame(order_frame)
@@ -878,7 +878,7 @@ class ZerodhaTradingApp:
         ttk.Label(config_frame, text="Product Type:").grid(row=4, column=0, padx=5, pady=5, sticky='w')
         self.spread_product_type = ttk.Combobox(config_frame, values=["MIS", "CNC", "NRML"], width=10)
         self.spread_product_type.grid(row=4, column=1, padx=5, pady=5, sticky='w')
-        self.spread_product_type.set("MIS")
+        self.spread_product_type.set("NRML")
         
         # Auto-trading toggle
         self.auto_spread_var = tk.BooleanVar(value=False)
@@ -1059,15 +1059,16 @@ class ZerodhaTradingApp:
         
         # Profit target
         ttk.Label(settings_frame, text="Profit Target (₹):").grid(row=0, column=0, padx=10, pady=10, sticky='w')
-        self.profit_target_var = tk.StringVar(value="100.0")
+        self.profit_target_var = tk.StringVar(value="10000000.0")
         self.profit_target_entry = ttk.Entry(settings_frame, textvariable=self.profit_target_var, width=15)
         self.profit_target_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
         
         # Stop loss
-        ttk.Label(settings_frame, text="Stop Loss (₹):").grid(row=1, column=0, padx=10, pady=10, sticky='w')
-        self.stop_loss_var = tk.StringVar(value="50.0")
-        self.stop_loss_entry = ttk.Entry(settings_frame, textvariable=self.stop_loss_var, width=15)
-        self.stop_loss_entry.grid(row=1, column=1, padx=10, pady=10, sticky='w')
+        if 0:
+            ttk.Label(settings_frame, text="Stop Loss (₹):").grid(row=1, column=0, padx=10, pady=10, sticky='w')
+            self.stop_loss_var = tk.StringVar(value="50.0")
+            self.stop_loss_entry = ttk.Entry(settings_frame, textvariable=self.stop_loss_var, width=15)
+            self.stop_loss_entry.grid(row=1, column=1, padx=10, pady=10, sticky='w')
         
         # Checkbox for auto-exit
         self.auto_exit_var = tk.BooleanVar(value=False)
@@ -1106,13 +1107,13 @@ class ZerodhaTradingApp:
         
         # Profit target status
         ttk.Label(status_frame, text="Profit Target:").grid(row=3, column=0, padx=10, pady=5, sticky='w')
-        self.profit_target_status = ttk.Label(status_frame, text="₹100.00")
+        self.profit_target_status = ttk.Label(status_frame, text="₹10000000.00")
         self.profit_target_status.grid(row=3, column=1, padx=10, pady=5, sticky='w')
         
         # Stop loss status
-        ttk.Label(status_frame, text="Stop Loss:").grid(row=4, column=0, padx=10, pady=5, sticky='w')
-        self.stop_loss_status = ttk.Label(status_frame, text="₹50.00")
-        self.stop_loss_status.grid(row=4, column=1, padx=10, pady=5, sticky='w')
+        # ttk.Label(status_frame, text="Stop Loss:").grid(row=4, column=0, padx=10, pady=5, sticky='w')
+        # self.stop_loss_status = ttk.Label(status_frame, text="₹50.00")
+        # self.stop_loss_status.grid(row=4, column=1, padx=10, pady=5, sticky='w')
         
         # Action button
         self.exit_button = ttk.Button(status_frame, text="MANUAL EXIT", 
@@ -2072,7 +2073,7 @@ class ZerodhaTradingApp:
                 "quantity": 1
             },
             "order_type": "MARKET",
-            "product": "MIS",
+            "product": "NRML",
             "price": "MARKET",
             "status": "TEST",
             "success": True
@@ -2106,11 +2107,11 @@ class ZerodhaTradingApp:
         try:
             # Get profit target and stop loss
             self.auto_exit_profit_target = float(self.profit_target_var.get())
-            self.auto_exit_stop_loss = float(self.stop_loss_var.get())
+            #self.auto_exit_stop_loss = float(self.stop_loss_var.get())
             
             # Update status labels
             self.profit_target_status.config(text=f"₹{self.auto_exit_profit_target:.2f}")
-            self.stop_loss_status.config(text=f"₹{self.auto_exit_stop_loss:.2f}")
+            #self.stop_loss_status.config(text=f"₹{self.auto_exit_stop_loss:.2f}")
             
             # Check if we have a position
             self.check_current_position()
@@ -2123,7 +2124,8 @@ class ZerodhaTradingApp:
             # Start monitoring thread
             threading.Thread(target=self.monitor_for_auto_exit, daemon=True).start()
             
-            self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}, Stop loss: ₹{self.auto_exit_stop_loss}")
+            #self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}, Stop loss: ₹{self.auto_exit_stop_loss}")
+            self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}")
             
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numbers for profit target and stop loss")
@@ -2229,10 +2231,10 @@ class ZerodhaTradingApp:
                     if pnl >= self.auto_exit_profit_target:
                         self.log_auto_exit(f"🎯 PROFIT TARGET REACHED: ₹{pnl:.2f}")
                         self.root.after(0, lambda: self.auto_exit_position("PROFIT"))
-                        
-                    elif pnl <= -self.auto_exit_stop_loss:
-                        self.log_auto_exit(f"⚠️ STOP LOSS HIT: ₹{pnl:.2f}")
-                        self.root.after(0, lambda: self.auto_exit_position("STOP_LOSS"))
+                    #disable stop loss for testing purpose    
+                    # elif pnl <= -self.auto_exit_stop_loss:
+                    #     self.log_auto_exit(f"⚠️ STOP LOSS HIT: ₹{pnl:.2f}")
+                    #     self.root.after(0, lambda: self.auto_exit_position("STOP_LOSS"))
                 
                 time.sleep(update_interval)
                 
@@ -2273,7 +2275,7 @@ class ZerodhaTradingApp:
                 transaction_type=exit_transaction,
                 quantity=quantity,
                 order_type="MARKET",
-                product="MIS"
+                product="NRML"
             )
             
             if result:
@@ -2659,7 +2661,7 @@ class ZerodhaTradingApp:
                 transaction_type="BUY",
                 quantity=quantity,
                 order_type="MARKET",
-                product="MIS"
+                product="NRML"
             )
         except Exception as e:
             messagebox.showerror("Error", f"Quick buy failed: {e}")
@@ -2673,7 +2675,7 @@ class ZerodhaTradingApp:
                 transaction_type="SELL",
                 quantity=quantity,
                 order_type="MARKET",
-                product="MIS"
+                product="NRML"
             )
         except Exception as e:
             messagebox.showerror("Error", f"Quick sell failed: {e}")
@@ -3645,8 +3647,9 @@ class ZerodhaTradingApp:
                 # Check trigger condition for special popup
                 should_perf_trigger, difference = self.check_trigger_condition(current_change, next_change)
                 
-                if should_perf_trigger:
-                    self.show_triggered_popup(current_change, next_change, difference)
+                #Yogesh 
+                # if should_perf_trigger:
+                #     self.show_triggered_popup(current_change, next_change, difference)
                 
                 # Determine comparison logic
                 next_increased = next_change > 0
@@ -3961,7 +3964,7 @@ class ZerodhaTradingApp:
         
         # Create new popup window with resizable panes
         window = tk.Toplevel(self.root)
-        #window.title("🚨 ALERT: Next Month Outperforming!")
+        window.title("🚨 ALERT: Next Month Outperforming!")
         window.geometry("700x600")
         
         # Make window resizable and draggable
