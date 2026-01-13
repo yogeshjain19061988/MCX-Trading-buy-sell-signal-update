@@ -1615,12 +1615,12 @@ class ZerodhaTradingApp:
                 # ENTRY Spread: BUY Next Month, SELL Current Month
                 leg1 = {
                     "tradingsymbol": self.next_month_contract,
-                    "transaction_type": "BUY",
+                    "transaction_type": "SELL",
                     "quantity": quantity
                 }
                 leg2 = {
                     "tradingsymbol": self.current_month_contract,
-                    "transaction_type": "SELL",
+                    "transaction_type": "BUY",
                     "quantity": quantity
                 }
                 spread_name = "ENTRY Spread"
@@ -1628,12 +1628,12 @@ class ZerodhaTradingApp:
                 # EXIT Spread: BUY Current Month, SELL Next Month
                 leg1 = {
                     "tradingsymbol": self.current_month_contract,
-                    "transaction_type": "BUY",
+                    "transaction_type": "SELL",
                     "quantity": quantity
                 }
                 leg2 = {
                     "tradingsymbol": self.next_month_contract,
-                    "transaction_type": "SELL",
+                    "transaction_type": "BUY",
                     "quantity": quantity
                 }
                 spread_name = "EXIT Spread"
@@ -1743,12 +1743,12 @@ class ZerodhaTradingApp:
                 # Close ENTRY Spread: SELL Next Month, BUY Current Month
                 leg1 = {
                     "tradingsymbol": self.next_month_contract,
-                    "transaction_type": "SELL",  # Opposite of opening BUY
+                    "transaction_type": "BUY",  # Opposite of opening BUY
                     "quantity": quantity
                 }
                 leg2 = {
                     "tradingsymbol": self.current_month_contract,
-                    "transaction_type": "BUY",  # Opposite of opening SELL
+                    "transaction_type": "SELL",  # Opposite of opening SELL
                     "quantity": quantity
                 }
                 close_name = "Close ENTRY Spread"
@@ -1756,12 +1756,12 @@ class ZerodhaTradingApp:
                 # Close EXIT Spread: SELL Current Month, BUY Next Month
                 leg1 = {
                     "tradingsymbol": self.current_month_contract,
-                    "transaction_type": "SELL",  # Opposite of opening BUY
+                    "transaction_type": "BUY",  # Opposite of opening BUY
                     "quantity": quantity
                 }
                 leg2 = {
                     "tradingsymbol": self.next_month_contract,
-                    "transaction_type": "BUY",  # Opposite of opening SELL
+                    "transaction_type": "SELL",  # Opposite of opening SELL
                     "quantity": quantity
                 }
                 close_name = "Close EXIT Spread"
@@ -2064,12 +2064,12 @@ class ZerodhaTradingApp:
             "spread_type": "TEST ENTRY Spread",
             "leg1": {
                 "tradingsymbol": self.next_month_contract,
-                "transaction_type": "BUY",
+                "transaction_type": "SELL",
                 "quantity": 1
             },
             "leg2": {
                 "tradingsymbol": self.current_month_contract,
-                "transaction_type": "SELL",
+                "transaction_type": "BUY",
                 "quantity": 1
             },
             "order_type": "MARKET",
