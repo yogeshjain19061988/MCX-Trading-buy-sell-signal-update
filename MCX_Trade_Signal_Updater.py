@@ -10,6 +10,7 @@ import pandas as pd
 import sqlite3
 import xlwings as xw
 import csv
+import multiprocessing
 from datetime import datetime as dt
 
 try:
@@ -23,6 +24,89 @@ import os
 
 print_debug = False
 FILE_NAME = 'MCX_Trading_Platform_Data.xlsx'
+
+import threading
+import time
+import pyttsx3
+
+gsound_price_difference = 0.0
+acknowledge_trigger_done = True
+speech_engine = None  # Global engine instance
+last_spoken_trigger = None  # Track last spoken trigger
+speech_cooldown = 30  # Minimum seconds between same speech
+
+def initialize_speech_engine():
+    """Initialize the speech engine once"""
+    global speech_engine
+    if speech_engine is None:
+        speech_engine = pyttsx3.init()
+        # Set properties
+        speech_engine.setProperty('rate', 150)    # Speed (words per minute), default is 200
+        speech_engine.setProperty('volume', 0.9)  # Volume (0.0 to 1.0), default is 1.0
+        
+        # Change voice (optional: get list of available voices and pick one)
+        voices = speech_engine.getProperty('voices')
+        # Use the second voice in the list (index 1), often a female voice on Windows
+        if len(voices) > 1:
+            speech_engine.setProperty('voice', voices[1].id)
+    
+    return speech_engine
+
+def background_task():
+    """Background task that speaks only when there's an unacknowledged trigger"""
+    engine = initialize_speech_engine()
+    last_speech_time = 0
+    
+    while True:
+        global acknowledge_trigger_done
+        global gsound_price_difference
+        global last_spoken_trigger
+        
+        # Check if we should speak (when trigger is not acknowledged)
+        if not acknowledge_trigger_done:
+            current_time = time.time()
+            
+            # Check cooldown
+            if current_time - last_speech_time >= speech_cooldown:
+                try:
+                    # Determine what message to speak based on price difference
+                    if gsound_price_difference < -10.0:  # Entry signal
+                        message = f"Entry signal detected. Price difference is {gsound_price_difference:.2f}"
+                        current_trigger = "ENTRY"
+                    elif gsound_price_difference > 10.0:  # Exit signal
+                        message = f"Exit signal detected. Price difference is {gsound_price_difference:.2f}"
+                        current_trigger = "EXIT"
+                    else:
+                        # For other triggers
+                        message = "Alert! Next month is outperforming current month. Check trading signals."
+                        current_trigger = "GENERAL"
+                    
+                    # Only speak if it's a new trigger or cooldown has passed
+                    if current_trigger != last_spoken_trigger or (current_time - last_speech_time >= speech_cooldown):
+                        print(f"Speaking: {message}")
+                        engine.say(message)
+                        engine.runAndWait()
+                        
+                        # Update tracking variables
+                        last_speech_time = current_time
+                        last_spoken_trigger = current_trigger
+                        
+                except Exception as e:
+                    print(f"Error in speech synthesis: {e}")
+                    time.sleep(2)
+        else:
+            # Reset last spoken trigger when acknowledged
+            last_spoken_trigger = None
+        
+        time.sleep(2)
+
+def start_thread():
+    """Start the background speech thread"""
+    #t = threading.Thread(target=background_task, daemon=True)
+    p = multiprocessing.Process(target=background_task,  daemon=True)
+    p.start()
+    #t.start()
+    print("Sound Thread started")
 
 def create_initial_file():
     """
@@ -345,7 +429,7 @@ class ZerodhaTradingApp:
         ttk.Label(config_frame, text="Commodity:").grid(row=0, column=0, padx=5, pady=5, sticky='w')
         self.month_commodity = ttk.Combobox(config_frame, values=["GOLD", "SILVER", "CRUDEOIL", "NATURALGAS", "COPPER", "LEAD", "ZINC"])
         self.month_commodity.grid(row=0, column=1, padx=5, pady=5, sticky='nsew')
-        self.month_commodity.set("GOLD")
+        self.month_commodity.set("NATURALGAS")
         
         # Load contracts button
         ttk.Button(config_frame, text="Load Current & Next Month", 
@@ -516,15 +600,15 @@ class ZerodhaTradingApp:
         self.next_change_label = ttk.Label(next_frame, text="Change: --%", font=('Arial', 10))
         self.next_change_label.grid(row=3, column=0, pady=5, sticky='w', padx=10)
         
-        # Smiley indicator frame
-        smiley_frame = ttk.LabelFrame(display_frame, text="Performance Indicator")
-        smiley_frame.grid(row=0, column=3, sticky='nsew', padx=(5, 5), pady=5)
+        # # Smiley indicator frame
+        # smiley_frame = ttk.LabelFrame(display_frame, text="Performance Indicator")
+        # smiley_frame.grid(row=0, column=3, sticky='nsew', padx=(5, 5), pady=5)
         
-        self.month_smiley_label = tk.Label(smiley_frame, text="😐", font=('Arial', 48), bg='white')
-        self.month_smiley_label.pack(pady=10)
+        # self.month_smiley_label = tk.Label(smiley_frame, text="😐", font=('Arial', 48), bg='white')
+        # self.month_smiley_label.pack(pady=10)
         
-        self.month_comparison_text = ttk.Label(smiley_frame, text="Comparison: --", font=('Arial', 10))
-        self.month_comparison_text.pack()
+        # self.month_comparison_text = ttk.Label(smiley_frame, text="Comparison: --", font=('Arial', 10))
+        # self.month_comparison_text.pack()
         
         # Middle section: Total Changes Summary
         total_frame = ttk.LabelFrame(right_frame, text="Total Changes Summary")
@@ -1057,13 +1141,15 @@ class ZerodhaTradingApp:
         
         settings_frame.grid_columnconfigure(1, weight=1)
         
-        # Profit target
+        # Profit target (optional - will exit when profit > 0 anyway)
         ttk.Label(settings_frame, text="Profit Target (₹):").grid(row=0, column=0, padx=10, pady=10, sticky='w')
-        self.profit_target_var = tk.StringVar(value="10000000.0")
+        self.profit_target_var = tk.StringVar(value="100.0")  # Changed from 10000000.0
         self.profit_target_entry = ttk.Entry(settings_frame, textvariable=self.profit_target_var, width=15)
         self.profit_target_entry.grid(row=0, column=1, padx=10, pady=10, sticky='w')
+        ttk.Label(settings_frame, text="(Will exit when profit > 0 regardless)", 
+                  font=('Arial', 8)).grid(row=0, column=2, padx=10, pady=10, sticky='w')
         
-        # Stop loss
+        # Stop loss (optional)
         if 0:
             ttk.Label(settings_frame, text="Stop Loss (₹):").grid(row=1, column=0, padx=10, pady=10, sticky='w')
             self.stop_loss_var = tk.StringVar(value="50.0")
@@ -1107,13 +1193,13 @@ class ZerodhaTradingApp:
         
         # Profit target status
         ttk.Label(status_frame, text="Profit Target:").grid(row=3, column=0, padx=10, pady=5, sticky='w')
-        self.profit_target_status = ttk.Label(status_frame, text="₹10000000.00")
+        self.profit_target_status = ttk.Label(status_frame, text="₹100.00")
         self.profit_target_status.grid(row=3, column=1, padx=10, pady=5, sticky='w')
         
-        # Stop loss status
-        # ttk.Label(status_frame, text="Stop Loss:").grid(row=4, column=0, padx=10, pady=5, sticky='w')
-        # self.stop_loss_status = ttk.Label(status_frame, text="₹50.00")
-        # self.stop_loss_status.grid(row=4, column=1, padx=10, pady=5, sticky='w')
+        # Exit condition status
+        ttk.Label(status_frame, text="Exit Condition:").grid(row=4, column=0, padx=10, pady=5, sticky='w')
+        self.exit_condition_status = ttk.Label(status_frame, text="Profit > 0", foreground='green')
+        self.exit_condition_status.grid(row=4, column=1, padx=10, pady=5, sticky='w')
         
         # Action button
         self.exit_button = ttk.Button(status_frame, text="MANUAL EXIT", 
@@ -2124,8 +2210,7 @@ class ZerodhaTradingApp:
             # Start monitoring thread
             threading.Thread(target=self.monitor_for_auto_exit, daemon=True).start()
             
-            #self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}, Stop loss: ₹{self.auto_exit_stop_loss}")
-            self.log_auto_exit(f"Auto exit monitoring started. Profit target: ₹{self.auto_exit_profit_target}")
+            self.log_auto_exit(f"Auto exit monitoring started. Will exit when: 1) Profit > 0, or 2) Profit target reached (₹{self.auto_exit_profit_target})")
             
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numbers for profit target and stop loss")
@@ -2228,10 +2313,15 @@ class ZerodhaTradingApp:
                 
                 # Check exit conditions if auto-exit is enabled
                 if self.auto_exit_enabled:
-                    if pnl >= self.auto_exit_profit_target:
-                        self.log_auto_exit(f"🎯 PROFIT TARGET REACHED: ₹{pnl:.2f}")
+                    # AUTO-EXIT WHEN PROFIT IS ACHIEVED (PNL > 0)
+                    if pnl > 0:
+                        self.log_auto_exit(f"✅ PROFIT ACHIEVED: ₹{pnl:.2f}")
                         self.root.after(0, lambda: self.auto_exit_position("PROFIT"))
-                    #disable stop loss for testing purpose    
+                    # Keep existing profit target condition for larger targets
+                    elif pnl >= self.auto_exit_profit_target:
+                        self.log_auto_exit(f"🎯 PROFIT TARGET REACHED: ₹{pnl:.2f}")
+                        self.root.after(0, lambda: self.auto_exit_position("PROFIT_TARGET"))
+                    # Keep stop loss condition (optional)
                     # elif pnl <= -self.auto_exit_stop_loss:
                     #     self.log_auto_exit(f"⚠️ STOP LOSS HIT: ₹{pnl:.2f}")
                     #     self.root.after(0, lambda: self.auto_exit_position("STOP_LOSS"))
@@ -2291,7 +2381,8 @@ class ZerodhaTradingApp:
                 
                 # Log the exit
                 reason_text = {
-                    "PROFIT": "Profit target achieved",
+                    "PROFIT": "Profit achieved (PNL > 0)",
+                    "PROFIT_TARGET": "Profit target reached",
                     "STOP_LOSS": "Stop loss triggered"
                 }.get(reason, "Auto exit")
                 
@@ -2337,8 +2428,12 @@ class ZerodhaTradingApp:
         # Set background color based on reason
         if reason == "PROFIT":
             bg_color = '#E8F5E9'  # Light green
-            title = "🎯 PROFIT TARGET REACHED!"
+            title = "✅ PROFIT ACHIEVED!"
             emoji = "💰"
+        elif reason == "PROFIT_TARGET":
+            bg_color = '#E8F5E9'  # Light green
+            title = "🎯 PROFIT TARGET REACHED!"
+            emoji = "🎯"
         elif reason == "STOP_LOSS":
             bg_color = '#FFEBEE'  # Light red
             title = "⚠️ STOP LOSS TRIGGERED!"
@@ -3537,6 +3632,10 @@ class ZerodhaTradingApp:
             # Calculate price difference using the formula:
             # change difference in rs = current month (Current Price - Previous Close) - next month (Current Price - Previous Close)
             price_difference = current_change_rupees - next_change_rupees
+            
+            # Update global price difference for speech
+            global gsound_price_difference
+            gsound_price_difference = price_difference
             if print_debug:
                 print("price_difference: ", price_difference)
             
@@ -3595,6 +3694,10 @@ class ZerodhaTradingApp:
                 current_change_rupees = current_price - current_prev_close
                 next_change_rupees = next_price - next_prev_close
                 price_difference = current_change_rupees - next_change_rupees
+                
+                # Update global price difference for speech
+                global gsound_price_difference
+                gsound_price_difference = price_difference
                 
                 # Update price labels
                 self.current_price_label.config(text=f"Current: ₹{current_price:.2f}")
@@ -3686,9 +3789,9 @@ class ZerodhaTradingApp:
                     result_color = 'orange'
                     smiley_status = "NEUTRAL"
                 
-                # Update smiley and text
-                self.month_smiley_label.config(text=smiley, fg=smiley_color)
-                self.month_comparison_text.config(text=comparison_text, foreground=result_color)
+                # # Update smiley and text
+                # self.month_smiley_label.config(text=smiley, fg=smiley_color)
+                # self.month_comparison_text.config(text=comparison_text, foreground=result_color)
                 
                 # Update result label
                 self.month_result_label.config(
@@ -4091,6 +4194,8 @@ class ZerodhaTradingApp:
         
         # Update trigger time
         self.last_trigger_time = time.time()
+        global acknowledge_trigger_done
+        acknowledge_trigger_done = False
         
         # Handle window close
         window.protocol("WM_DELETE_WINDOW", lambda: self.acknowledge_trigger(window))
@@ -4099,7 +4204,8 @@ class ZerodhaTradingApp:
         """Acknowledge and close triggered popup"""
         window.destroy()
         self.triggered_popup = None
-        
+        global acknowledge_trigger_done
+        acknowledge_trigger_done = True
         # Reset status after 10 seconds
         self.root.after(10000, lambda: None)
 
@@ -4609,8 +4715,8 @@ def main():
     root = tk.Tk()
     app = ZerodhaTradingApp(root)
     create_initial_file()
+    start_thread()
     root.mainloop()
-    
 
 if __name__ == "__main__":
     main()
