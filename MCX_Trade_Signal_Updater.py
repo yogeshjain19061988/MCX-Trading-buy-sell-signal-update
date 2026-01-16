@@ -1,17 +1,26 @@
+# Standard library
+import os
+import json
+import csv
+import time
+import queue
+import threading
+import multiprocessing
+import sqlite3
+import webbrowser
+from datetime import datetime as dt, timedelta, date
+from time import sleep
+
+# Tkinter
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, PanedWindow
-import json
-import os
-import threading
-import time
-from datetime import datetime, timedelta, date
-import webbrowser
+
+# Third-party libraries
 import pandas as pd
-import sqlite3
 import xlwings as xw
-import csv
-import multiprocessing
-from datetime import datetime as dt
+import openpyxl
+import pyttsx3
+
 
 try:
     from kiteconnect import KiteConnect
@@ -19,15 +28,35 @@ except ImportError:
     print("Please install kiteconnect: pip install kiteconnect")
     exit()
 
-import openpyxl
-import os
 
 print_debug = False
 FILE_NAME = 'MCX_Trading_Platform_Data.xlsx'
+b_acknowledge_entry_exit_signal = False
 
-import threading
-import time
-import pyttsx3
+
+qSound = queue.Queue()
+engine = pyttsx3.init()
+
+def background_sound_worker():
+    engine = pyttsx3.init()
+    engine.startLoop(False)
+
+    while True:
+        txt = qSound.get()
+        if txt is None:
+            qSound.task_done()
+            break
+
+        print(f"Speaking: {txt}")
+        engine.say(txt)
+
+        while engine.isBusy():
+            engine.iterate()
+            time.sleep(0.01)
+
+        qSound.task_done()
+
+    engine.endLoop()
 
 gsound_price_difference = 0.0
 acknowledge_trigger_done = True
@@ -52,61 +81,6 @@ def initialize_speech_engine():
     
     return speech_engine
 
-def background_task():
-    """Background task that speaks only when there's an unacknowledged trigger"""
-    engine = initialize_speech_engine()
-    last_speech_time = 0
-    
-    while True:
-        global acknowledge_trigger_done
-        global gsound_price_difference
-        global last_spoken_trigger
-        
-        # Check if we should speak (when trigger is not acknowledged)
-        if not acknowledge_trigger_done:
-            current_time = time.time()
-            
-            # Check cooldown
-            if current_time - last_speech_time >= speech_cooldown:
-                try:
-                    # Determine what message to speak based on price difference
-                    if gsound_price_difference < -10.0:  # Entry signal
-                        message = f"Entry signal detected. Price difference is {gsound_price_difference:.2f}"
-                        current_trigger = "ENTRY"
-                    elif gsound_price_difference > 10.0:  # Exit signal
-                        message = f"Exit signal detected. Price difference is {gsound_price_difference:.2f}"
-                        current_trigger = "EXIT"
-                    else:
-                        # For other triggers
-                        message = "Alert! Next month is outperforming current month. Check trading signals."
-                        current_trigger = "GENERAL"
-                    
-                    # Only speak if it's a new trigger or cooldown has passed
-                    if current_trigger != last_spoken_trigger or (current_time - last_speech_time >= speech_cooldown):
-                        print(f"Speaking: {message}")
-                        engine.say(message)
-                        engine.runAndWait()
-                        
-                        # Update tracking variables
-                        last_speech_time = current_time
-                        last_spoken_trigger = current_trigger
-                        
-                except Exception as e:
-                    print(f"Error in speech synthesis: {e}")
-                    time.sleep(2)
-        else:
-            # Reset last spoken trigger when acknowledged
-            last_spoken_trigger = None
-        
-        time.sleep(2)
-
-def start_thread():
-    """Start the background speech thread"""
-    #t = threading.Thread(target=background_task, daemon=True)
-    p = multiprocessing.Process(target=background_task,  daemon=True)
-    p.start()
-    #t.start()
-    print("Sound Thread started")
 
 def create_initial_file():
     """
@@ -1015,13 +989,13 @@ class ZerodhaTradingApp:
         strategy_text = """
         📈 ENTRY SPREAD STRATEGY:
         When price difference < entry threshold (-6₹):
-        1. BUY Next Month (cheaper/outperforming)
+        1. BUY Curr Month (cheaper/outperforming)
         2. SELL Current Month (expensive/underperforming)
         → Betting on convergence
         
         📉 EXIT SPREAD STRATEGY:
         When price difference > exit threshold (+6₹):
-        1. BUY Current Month (undervalued)
+        1. BUY Next Month (undervalued)
         2. SELL Next Month (overvalued)
         → Betting on mean reversion
         
@@ -1466,7 +1440,7 @@ class ZerodhaTradingApp:
             )
             
             # Log the order
-            order_time = datetime.now().strftime("%H:%M:%S")
+            order_time = dt.now().strftime("%H:%M:%S")
             order_price = price if price else "MARKET"
             
             order_record = {
@@ -1742,7 +1716,7 @@ class ZerodhaTradingApp:
     def execute_spread_order(self, leg1, leg2, order_type, product, price=None, spread_name=""):
         """Execute a calendar spread (two legs simultaneously)"""
         try:
-            spread_time = datetime.now().strftime("%H:%M:%S")
+            spread_time = dt.now().strftime("%H:%M:%S")
             spread_id = f"SPREAD_{int(time.time())}"
             
             # Execute first leg
@@ -1878,7 +1852,7 @@ class ZerodhaTradingApp:
                 
                 # Record closed spread
                 closed_record = {
-                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "time": dt.now().strftime("%H:%M:%S"),
                     "spread_type": f"Closed {spread_type}",
                     "entry_diff": entry_diff,
                     "exit_diff": current_diff,
@@ -2145,7 +2119,7 @@ class ZerodhaTradingApp:
         
         # Create a test spread record
         test_spread = {
-            "time": datetime.now().strftime("%H:%M:%S"),
+            "time": dt.now().strftime("%H:%M:%S"),
             "spread_id": f"TEST_{int(time.time())}",
             "spread_type": "TEST ENTRY Spread",
             "leg1": {
@@ -2502,7 +2476,7 @@ class ZerodhaTradingApp:
     def log_auto_exit(self, message):
         """Add message to auto-exit log"""
         def update_log():
-            timestamp = datetime.now().strftime("%H:%M:%S")
+            timestamp = dt.now().strftime("%H:%M:%S")
             self.auto_exit_log.insert(tk.END, f"[{timestamp}] {message}\n")
             self.auto_exit_log.see(tk.END)
             # Also log to main log
@@ -2624,7 +2598,7 @@ class ZerodhaTradingApp:
                                     font=('Arial', 14, 'bold'),
                                     foreground='green' if price_difference > 0 else 'red')
         price_diff_label.grid(row=0, column=1, sticky='w', pady=10, padx=10)
-        
+        #qSound.put("price difference " + "{:.2f}".format(price_difference))
         # Threshold info
         ttk.Label(details_grid, text="Trigger Threshold:", font=('Arial', 11)).grid(row=1, column=0, sticky='w', pady=5)
         if signal_type == "ENTRY":
@@ -2648,7 +2622,7 @@ class ZerodhaTradingApp:
         ttk.Label(details_grid, text=self.next_month_contract, font=('Arial', 10)).grid(row=3, column=1, sticky='w', pady=5, padx=10)
         
         # Time of trigger
-        trigger_time = datetime.now().strftime("%H:%M:%S")
+        trigger_time = dt.now().strftime("%H:%M:%S")
         ttk.Label(details_grid, text="Signal Time:", font=('Arial', 9)).grid(row=4, column=0, sticky='w', pady=5)
         ttk.Label(details_grid, text=trigger_time, font=('Arial', 9)).grid(row=4, column=1, sticky='w', pady=5, padx=10)
         
@@ -2706,6 +2680,9 @@ class ZerodhaTradingApp:
                                     command=lambda: self.toggle_auto_trading(auto_trade_var))
         auto_check.pack(pady=10)
         
+        
+        global b_acknowledge_entry_exit_signal
+        b_acknowledge_entry_exit_signal = False
         # Control buttons at bottom
         control_frame = ttk.Frame(action_frame)
         control_frame.pack(fill='both', expand=True,  pady=10)
@@ -2797,6 +2774,8 @@ class ZerodhaTradingApp:
         """Acknowledge and close entry/exit popup"""
         window.destroy()
         self.entry_exit_popup = None
+        global b_acknowledge_entry_exit_signal
+        b_acknowledge_entry_exit_signal = True
         
         # Reset status after cooldown
         self.root.after(10000, lambda: None)
@@ -2926,7 +2905,7 @@ class ZerodhaTradingApp:
 
         
         self.price_diff_timestamp = ttk.Label(title_frame, 
-                                            text=f"Last update: {datetime.now().strftime('%H:%M:%S')}",
+                                            text=f"Last update: {dt.now().strftime('%H:%M:%S')}",
                                             font=('Arial', 9))
         self.price_diff_timestamp.pack(pady=5)
         
@@ -3089,7 +3068,7 @@ class ZerodhaTradingApp:
                 price_difference = current_change_rupees - next_change_rupees
                 
                 # Update timestamp
-                self.price_diff_timestamp.config(text=f"Last update: {datetime.now().strftime('%H:%M:%S')}")
+                self.price_diff_timestamp.config(text=f"Last update: {dt.now().strftime('%H:%M:%S')}")
                 
                 # Update current month change
                 current_color = 'green' if current_change_rupees >= 0 else 'red'
@@ -3130,7 +3109,7 @@ class ZerodhaTradingApp:
     def log_message(self, message):
         """Add message to log"""
         def update_log():
-            timestamp = datetime.now().strftime("%H:%M:%S")
+            timestamp = dt.now().strftime("%H:%M:%S")
             self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
             self.log_text.see(tk.END)
         
@@ -3272,7 +3251,7 @@ class ZerodhaTradingApp:
                 all_instruments = self.kite.instruments("MCX")
                 self.instruments_df = pd.DataFrame(all_instruments)
                 
-                # Convert expiry to datetime if it's string
+                # Convert expiry to dt if it's string
                 if 'expiry' in self.instruments_df.columns and self.instruments_df['expiry'].dtype == 'object':
                     self.instruments_df['expiry'] = pd.to_datetime(self.instruments_df['expiry']).dt.date
                 
@@ -3303,7 +3282,7 @@ class ZerodhaTradingApp:
             relevant_instruments = relevant_instruments.sort_values('expiry')
             
             # Get current date
-            current_date = datetime.now().date()
+            current_date = dt.now().date()
             
             # Filter out expired contracts
             relevant_instruments = relevant_instruments[relevant_instruments['expiry'] >= current_date]
@@ -3333,7 +3312,7 @@ class ZerodhaTradingApp:
         
         try:
             # Get today and previous trading day
-            today = datetime.now().date()
+            today = dt.now().date()
             
             # Try to get data for last 5 days to find a trading day
             for days_back in range(1, 6):
@@ -3548,6 +3527,8 @@ class ZerodhaTradingApp:
                     return
         
         self.month_comparison_running = True
+        global b_acknowledge_entry_exit_signal
+        b_acknowledge_entry_exit_signal = False
         self.start_month_btn.config(state='disabled')
         self.stop_month_btn.config(state='normal')
         self.month_status_label.config(text="Status: Monitoring", foreground='green')
@@ -3636,9 +3617,31 @@ class ZerodhaTradingApp:
             # Update global price difference for speech
             global gsound_price_difference
             gsound_price_difference = price_difference
-            if print_debug:
-                print("price_difference: ", price_difference)
             
+            # global b_acknowledge_entry_exit_signal
+            if not b_acknowledge_entry_exit_signal:
+            #if True:
+                if price_difference < self.entry_threshold:
+                    message = f"Entry signal detected. Price difference is {gsound_price_difference:.2f}"
+                    qSound.put(message)
+                    print("price difference " + "{:.2f}".format(price_difference))
+                    
+                elif price_difference > self.exit_threshold:
+                    message = f"Exit signal detected. Price difference is {gsound_price_difference:.2f}"
+                    qSound.put(message)
+                    print("price difference " + "{:.2f}".format(price_difference))
+                    
+
+                elif price_difference == -self.exit_threshold:
+                    message = f"Entry signal detected. Price difference is {gsound_price_difference:.2f}"
+                    qSound.put(message)
+                    print("price difference " + "{:.2f}".format(price_difference))
+                
+                elif price_difference == self.exit_threshold:
+                    message = f"Exit signal detected. Price difference is {gsound_price_difference:.2f}"
+                    qSound.put(message)
+                    print("price difference " + "{:.2f}".format(price_difference))
+                    
             update_existing_file(price_difference)
             
             # Update labels with colors
@@ -4275,7 +4278,7 @@ class ZerodhaTradingApp:
         subtitle_label.pack(pady=2)
         
         self.popup_timestamp = ttk.Label(title_frame, 
-                                        text=f"Last update: {datetime.now().strftime('%H:%M:%S')}",
+                                        text=f"Last update: {dt.now().strftime('%H:%M:%S')}",
                                         font=('Arial', 9))
         self.popup_timestamp.pack(pady=5)
         
@@ -4486,7 +4489,7 @@ class ZerodhaTradingApp:
             total_sum = current_percent + next_percent
             
             # Update timestamp
-            self.popup_timestamp.config(text=f"Last update: {datetime.now().strftime('%H:%M:%S')}")
+            self.popup_timestamp.config(text=f"Last update: {dt.now().strftime('%H:%M:%S')}")
             
             # Update Current Month section
             self.update_contract_section(
@@ -4714,8 +4717,8 @@ class ZerodhaTradingApp:
 def main():
     root = tk.Tk()
     app = ZerodhaTradingApp(root)
+    threading.Thread(target=background_sound_worker, daemon=True).start()
     create_initial_file()
-    start_thread()
     root.mainloop()
 
 if __name__ == "__main__":
